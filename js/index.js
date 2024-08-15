@@ -2,7 +2,7 @@
 
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
-import { bezier, sortBy } from "./util.js";
+import { animate, sortBy } from "./util.js";
 
 const isInsideRectangle = LiteGraph.isInsideRectangle;
 
@@ -122,38 +122,31 @@ function getValidTargets(node, type, isInput) {
   return result;
 }
 
-function moveCanvas(dstX, dstY, cb, deley = 1000) {
+function moveCanvas(x, y) {
+  app.canvas.ds.offset[0] = x;
+  app.canvas.ds.offset[1] = y;
+  if (app.canvas.ds.onredraw) {
+    app.canvas.ds.onredraw(app.canvas.ds);
+  }
+}
+
+function renderCanvas() {
+  app.canvas.draw(true, true);
+}
+
+function animateCanvas(dstX, dstY, cb, time = 1000) {
   const srcX = app.canvas.ds.offset[0];
   const srcY = app.canvas.ds.offset[1];
   const data = [
-    {x: srcX, y: srcY},
-    {x: dstX, y: dstY},
-    {x: dstX, y: dstY},
-    {x: dstX, y: dstY},
+    [srcX, srcY],
+    [dstX, dstY],
+    [dstX, dstY],
+    [dstX, dstY],
   ];
-  let count = 0;
-  let fps = 10;
 
-  function anim() {
-    count += fps;
-    const {x, y} = bezier(data, count / deley);
-    move(x, y);
-    if (count < deley) {
-      return cb(setTimeout(anim, fps));
-    } else {
-      return cb(null);
-    }
-  }
+  let tick = 10;
 
-  function move(x, y) {
-    app.canvas.ds.offset[0] = x;
-    app.canvas.ds.offset[1] = y;
-    if (app.canvas.ds.onredraw) {
-      app.canvas.ds.onredraw(app.canvas.ds);
-    }
-  }
-
-  anim();
+  animate(data, cb, time, tick);
 }
 
 ;(() => {
@@ -205,17 +198,18 @@ function moveCanvas(dstX, dstY, cb, deley = 1000) {
         const offsetY = canvasH * 0.5 - target.cy;
 
         requestAnimationFrame(() => {
-          moveCanvas(offsetX, offsetY, function(timer) {
+          animateCanvas(offsetX, offsetY, function([x, y], now, timer) {
             animateTimer = timer;
-            const diffX = (initialX - app.canvas.ds.offset[0]);
-            const diffY = (initialY - app.canvas.ds.offset[1]);
+            moveCanvas(x, y);
+            const diffX = (initialX - x);
+            const diffY = (initialY - y);
             const mouse = [initialMouseX + diffX, initialMouseY + diffY];
             app.canvas.mouse[0] = mouse[0];
             app.canvas.mouse[1] = mouse[1];
             app.canvas.last_mouse = mouse;
             app.canvas.graph_mouse[0] = initialGraphMouseX + diffX;
             app.canvas.graph_mouse[1] = initialGraphMouseY + diffY;
-            app.canvas.draw(true, true);
+            renderCanvas();
           }, 384);
         });
       } catch(err) {

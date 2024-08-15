@@ -108,17 +108,38 @@ function isSameType(objA, objB) {
 function random(min, max) {
   return Math.random() * (max - min) + min;
 }
-function bezier(points, time) {
-  if (points.length === 1) {
-    return points[0];
+function bezier(data, time) {
+  if (data.length === 1) {
+    return data[0];
   }
-  let newPoints = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    let x = (1 - time) * points[i].x + time * points[i + 1].x;
-    let y = (1 - time) * points[i].y + time * points[i + 1].y;
-    newPoints.push({ x, y });
+  let d = [];
+  for (let i = 0; i < data.length - 1; i++) {
+    let x = (1 - time) * data[i][0] + time * data[i + 1][0];
+    let y = (1 - time) * data[i][1] + time * data[i + 1][1];
+    d.push([x, y]);
   }
-  return bezier(newPoints, time);
+  return bezier(d, time);
+}
+function animate(data, cb, time, tick) {
+  if (!time) {
+    time = 1e3;
+  }
+  if (!tick) {
+    tick = 10;
+  }
+  let now = 0, d = bezier(data, now / time, now);
+  cb(d, now, anim());
+  function anim() {
+    now += tick;
+    d = bezier(data, now / time);
+    return setTimeout(function() {
+      if (now < time) {
+        cb(d, now, anim());
+      } else {
+        cb(d, now, null);
+      }
+    }, tick);
+  }
 }
 function splitInt(str) {
   return str.split(/([0-9]+)/);
@@ -658,6 +679,7 @@ function promiseAll(funcs) {
   }, Promise.resolve([]));
 }
 export {
+  animate,
   createArray as array,
   bezier,
   getCases as cases,
