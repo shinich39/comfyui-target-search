@@ -321,6 +321,6 @@ function animateCanvas(dstX, dstY, cb, time = 1000) {
   }
 })();
 
-// app.registerExtension({
-// 	name: `shinich39.TargetSearch`,
-// });
+app.registerExtension({
+	name: `shinich39.TargetSearch`,
+});
