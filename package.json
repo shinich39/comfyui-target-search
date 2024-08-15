@@ -1,0 +1,15 @@
+{
+  "name": "comfyui-target-search",
+  "version": "1.0.0",
+  "description": "Move canvas to target on dragging connection.",
+  "type": "module",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node test/index.js"
+  },
+  "author": "shinichi39 <shinich39@gmail.com>",
+  "license": "MIT"
+}
