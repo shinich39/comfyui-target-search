@@ -1,5 +1,15 @@
 // index.js
 var BASE64_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+var TYPE_PRIORITY = [
+  isUndefined,
+  isNull,
+  isBoolean,
+  isNumber,
+  isString,
+  isObject,
+  isArray,
+  isFunction
+];
 var __uniq__ = 0;
 function isBoolean(obj) {
   return typeof obj === "boolean";
@@ -374,44 +384,54 @@ function getModeValue(arr) {
   }
   return maxValue;
 }
-function sortArray(arr) {
-  const priorities = [
-    isUndefined,
-    isNull,
-    isBoolean,
-    isNumber,
-    isString,
-    isObject,
-    isArray,
-    isFunction
-  ];
+function compareObjects(a, b) {
+  const aIdx = TYPE_PRIORITY.findIndex(function(fn) {
+    return fn(a);
+  });
+  const bIdx = TYPE_PRIORITY.findIndex(function(fn) {
+    return fn(b);
+  });
+  if (aIdx !== bIdx) {
+    return aIdx - bIdx;
+  } else if (aIdx === 0 || aIdx === 1) {
+    return 0;
+  } else if (aIdx === 2) {
+    return a !== b ? a ? 1 : -1 : 0;
+  } else if (aIdx === 3) {
+    return a - b;
+  } else if (aIdx === 4) {
+    return a.localeCompare(b, void 0, {
+      numeric: true,
+      sensitivity: "base"
+    });
+  } else if (aIdx === 5) {
+    return Object.keys(a).length - Object.keys(b).length;
+  } else if (aIdx === 6) {
+    return a.length - b.length;
+  } else {
+    return 0;
+  }
+}
+function sortArray(arr, desc) {
+  desc = Boolean(desc);
   return arr.sort(function(a, b) {
-    const aIdx = priorities.findIndex(function(fn) {
-      return fn(a);
-    });
-    const bIdx = priorities.findIndex(function(fn) {
-      return fn(b);
-    });
-    if (aIdx !== bIdx) {
-      return aIdx - bIdx;
-    } else if (aIdx === 0 || aIdx === 1) {
-      return 0;
-    } else if (aIdx === 2) {
-      return a !== b ? a ? 1 : -1 : 0;
-    } else if (aIdx === 3) {
-      return a - b;
-    } else if (aIdx === 4) {
-      return a.localeCompare(b, void 0, {
-        numeric: true,
-        sensitivity: "base"
-      });
-    } else if (aIdx === 5) {
-      return Object.keys(a).length - Object.keys(b).length;
-    } else if (aIdx === 6) {
-      return a.length - b.length;
-    } else {
-      return 0;
+    return desc ? !compareObjects(a, b) : compareObjects(a, b);
+  });
+}
+function sortObject(arr, sorter) {
+  if (typeof sorter === "string") {
+    sorter = sorter.split(" ").filter(Boolean);
+  }
+  return arr.sort(function(a, b) {
+    for (const key of sorter) {
+      const d = /^-/.test(key);
+      const k = key.replace(/^-/, "");
+      const r = compareObjects(a[k], b[k]);
+      if (r !== 0) {
+        return d ? -r : r;
+      }
     }
+    return 0;
   });
 }
 function shuffleArray(arr) {
@@ -678,6 +698,7 @@ export {
   random,
   shuffleArray as shuffle,
   sortArray as sort,
+  sortObject as sortBy,
   splitFloat,
   splitInt,
   toBase64,

@@ -2,7 +2,7 @@
 
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
-import * as util from "./util.min.js";
+import { bezier, sortBy } from "./util.js";
 
 const isInsideRectangle = LiteGraph.isInsideRectangle;
 
@@ -96,6 +96,8 @@ function nodeToTarget(node) {
     cy: node.pos[1] + node.size[1] * 0.5,
     x: node.pos[0],
     y: node.pos[1],
+    x1: Math.floor(node.pos[0]), // Math.floor(node.pos[0] / 64)
+    y1: Math.floor(node.pos[1]), // Math.floor(node.pos[1] / 64)
     width: node.size[0],
     height: node.size[1],
   }
@@ -134,7 +136,7 @@ function moveCanvas(dstX, dstY, cb, deley = 1000) {
 
   function anim() {
     count += fps;
-    const {x, y} = util.bezier(data, count / deley);
+    const {x, y} = bezier(data, count / deley);
     move(x, y);
     if (count < deley) {
       return cb(setTimeout(anim, fps));
@@ -285,13 +287,8 @@ function moveCanvas(dstX, dstY, cb, deley = 1000) {
           const validTargets = getValidTargets(initialNode, initialType, isInput);
           const initialTarget = nodeToTarget(initialNode);
           
-          hTargets = [initialTarget, ...validTargets].sort((a, b) => {
-            return a.cx - b.cx;
-          });
-  
-          vTargets = [initialTarget, ...validTargets].sort((a, b) => {
-            return a.cy - b.cy;
-          });
+          hTargets = sortBy([initialTarget, ...validTargets], ["x1", "y1"]);
+          vTargets = sortBy([initialTarget, ...validTargets], ["y1", "x1"]);
   
           initialTargets = hTargets;
   
