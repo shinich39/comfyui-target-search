@@ -4,7 +4,7 @@ import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { animate, sortBy } from "./util.js";
 
-const isInsideRectangle = LiteGraph.isInsideRectangle;
+// const isInsideRectangle = LiteGraph.isInsideRectangle;
 
 function chkDragging(e) {
   // const isLeftClick = e.buttons === 1;
@@ -39,9 +39,16 @@ function getVisibleArea() {
 }
 
 function getCanvasCenter() {
-  const x = this.ds.visible_area[0] + this.ds.visible_area[2] * 0.5;
-  const y = this.ds.visible_area[1] + this.ds.visible_area[3] * 0.5;
-  return { x, y };
+  const x = app.canvas.ds.visible_area[0] + app.canvas.ds.visible_area[2] * 0.5;
+  const y = app.canvas.ds.visible_area[1] + app.canvas.ds.visible_area[3] * 0.5;
+  return [x, y];
+}
+
+function getMouseCenter() {
+  return [
+    app.canvas.graph_mouse[0],
+    app.canvas.graph_mouse[1],
+  ]
 }
 
 function isValidType(a, b) {
@@ -56,41 +63,9 @@ function isValidType(a, b) {
   return a === b;
 }
 
-// get slots
-// function getValidTargets(node, type, isInput) {
-//   const result = [];
-//   for (const n of app.graph._nodes) {
-//     if (n.id === node.id) {
-//       continue;
-//     }
-
-//     const slots = isInput ?
-//       n.outputs?.filter(e => isValidType(e.type, type)) ?? [] :
-//       n.inputs?.filter(e => isValidType(e.type, type)) ?? [];
-
-//     if (slots.length < 1) {
-//       continue;
-//     }
-
-//     result.push(...slots.map((s, i) => {
-//       const slotIndex = isInput ? n.findOutputSlot(s.name) : n.findInputSlot(s.name);
-//       const slotPos = n.getConnectionPos(isInput, slotIndex);
-//       return {
-//         node: n,
-//         nodeX: n.pos[0] + n.size[0] * 0.5,
-//         nodeY: n.pos[1] + n.size[1] * 0.5,
-//         slot: s,
-//         slotX: slotPos[0],
-//         slotY: slotPos[1],
-//         slotIndex: slotIndex,
-//       }
-//     }));
-//   }
-//   return result;
-// }
-
 function nodeToTarget(node) {
   return {
+    id: node.id,
     node: node,
     cx: node.pos[0] + node.size[0] * 0.5,
     cy: node.pos[1] + node.size[1] * 0.5,
@@ -103,8 +78,30 @@ function nodeToTarget(node) {
   }
 }
 
-// get nodes
-function getValidTargets(node, type, isInput) {
+function slotToTarget(node, slot, isInput) {
+  const slotIndex = isInput ? node.findInputSlot(slot.name) : node.findOutputSlot(slot.name);
+  const slotPos = node.getConnectionPos(isInput, slotIndex);
+  return {
+    id: `${node.id}.${slotIndex}`,
+    node: node,
+    // nodeCX: node.pos[0] + node.size[0] * 0.5,
+    // nodeCY: node.pos[1] + node.size[1] * 0.5,
+    // nodeX: node.pos[0],
+    // nodeY: node.pos[1],
+    // nodeX1: Math.floor(node.pos[0]), // Math.floor(node.pos[0] / 64)
+    // nodeY1: Math.floor(node.pos[1]), // Math.floor(node.pos[1] / 64)
+    // nodeWidth: node.size[0],
+    // nodeHeight: node.size[1],
+    slot: slot,
+    x: slotPos[0],
+    y: slotPos[1],
+    index: slotIndex,
+    width: 10,
+    height: 20,
+  }
+}
+
+function getValidTargetNodes(node, type, isInput) {
   const result = [];
   for (const n of app.graph._nodes) {
     if (n.id === node.id) {
@@ -118,6 +115,28 @@ function getValidTargets(node, type, isInput) {
     if (slots.length > 0) {
       result.push(nodeToTarget(n));
     }
+  }
+  return result;
+}
+
+function getValidTargetSlots(node, type, isInput) {
+  const result = [];
+  for (const n of app.graph._nodes) {
+    if (n.id === node.id) {
+      continue;
+    }
+
+    const slots = isInput ?
+      n.outputs?.filter(e => isValidType(e.type, type)) ?? [] :
+      n.inputs?.filter(e => isValidType(e.type, type)) ?? [];
+
+    if (slots.length < 1) {
+      continue;
+    }
+
+    result.push(...slots.map((s, i) => {
+      return slotToTarget(n, s, !isInput);
+    }));
   }
   return result;
 }
@@ -158,29 +177,48 @@ function animateCanvas(dstX, dstY, cb, time = 1000) {
     let initialType;
     let initialSlot;
     let initialSlotIndex;
-    let initialTargets = [];
-    let vTargets = [];
-    let hTargets = [];
-    let currentTarget;
+    let hTargetNodes = [];
+    let vTargetNodes = [];
+    let hTargetSlots = [];
+    let vTargetSlots = [];
     let animateTimer;
   
-    function getNearestTarget(x, y) {
-      return initialTargets.reduce((p, c) => {
+    function getNearestTargetNode() {
+      const [x, y] = getCanvasCenter();
+      return hTargetNodes.reduce((p, c) => {
+        const dp = Math.abs(x - p.cx) + Math.abs(y - p.cy);
+        const dc = Math.abs(x - c.cx) + Math.abs(y - c.cy);
+        return dp < dc ? p : c;
+      }, hTargetNodes[0]);
+    }
+
+    function getNearestTargetSlot() {
+      // const [x, y] = getMouseCenter();
+      const [x, y] = getCanvasCenter();
+      return hTargetSlots.reduce((p, c) => {
         const dp = Math.abs(x - p.x) + Math.abs(y - p.y);
         const dc = Math.abs(x - c.x) + Math.abs(y - c.y);
         return dp < dc ? p : c;
-      }, initialTargets[0]);
+      }, hTargetSlots[0]);
     }
   
-    function getHorizontalIndex(target) {
-      return hTargets.findIndex(e => e.node.id === target.node.id);
+    function getHorizontalNodeIndex(target) {
+      return hTargetNodes.findIndex(e => e.id === target.id);
     }
   
-    function getVerticalIndex(target) {
-      return vTargets.findIndex(e => e.node.id === target.node.id);
+    function getVerticalNodeIndex(target) {
+      return vTargetNodes.findIndex(e => e.id === target.id);
     }
   
-    function moveCanvasToTarget(target) {
+    function getHorizontalSlotIndex(target) {
+      return hTargetSlots.findIndex(e => e.id === target.id);
+    }
+  
+    function getVerticalSlotIndex(target) {
+      return vTargetSlots.findIndex(e => e.id === target.id);
+    }
+
+    function moveCanvasToTarget(x, y) {
       try {
         if (animateTimer) {
           clearTimeout(animateTimer);
@@ -194,15 +232,17 @@ function animateCanvas(dstX, dstY, cb, time = 1000) {
         const initialY = app.canvas.ds.offset[1];
         const canvasW = app.canvas.ds.visible_area[2];
         const canvasH = app.canvas.ds.visible_area[3];
-        const offsetX = canvasW * 0.5 - target.cx;
-        const offsetY = canvasH * 0.5 - target.cy;
+        // const mouseX = app.canvas.graph_mouse[0];
+        // const mouseY = app.canvas.graph_mouse[1];
+        const offsetX = canvasW * 0.5 - x;
+        const offsetY = canvasH * 0.5 - y;
 
         requestAnimationFrame(() => {
-          animateCanvas(offsetX, offsetY, function([x, y], now, timer) {
+          animateCanvas(offsetX, offsetY, function([nx, ny], now, timer) {
             animateTimer = timer;
-            moveCanvas(x, y);
-            const diffX = (initialX - x);
-            const diffY = (initialY - y);
+            moveCanvas(nx, ny);
+            const diffX = (initialX - nx);
+            const diffY = (initialY - ny);
             const mouse = [initialMouseX + diffX, initialMouseY + diffY];
             app.canvas.mouse[0] = mouse[0];
             app.canvas.mouse[1] = mouse[1];
@@ -219,31 +259,62 @@ function animateCanvas(dstX, dstY, cb, time = 1000) {
   
     function keydownEvent(e) {
       const { key } = e;
-      if (onDrag && /^Arrow/.test(key)) {
-        e.preventDefault();
-        let prevIndex, newIndex, newTarget;
-        if (key === "ArrowLeft") {
-          prevIndex = getHorizontalIndex(currentTarget);
-          newIndex = Math.max(0, Math.min(hTargets.length - 1, prevIndex - 1));
-          newTarget = hTargets[newIndex];
-        } else if (key === "ArrowRight") {
-          prevIndex = getHorizontalIndex(currentTarget);
-          newIndex = Math.max(0, Math.min(hTargets.length - 1, prevIndex + 1));
-          newTarget = hTargets[newIndex];
-        } else if (key === "ArrowDown") {
-          prevIndex = getVerticalIndex(currentTarget);
-          newIndex = Math.max(0, Math.min(vTargets.length - 1, prevIndex + 1));
-          newTarget = vTargets[newIndex];
-        } else if (key === "ArrowUp") {
-          prevIndex = getVerticalIndex(currentTarget);
-          newIndex = Math.max(0, Math.min(vTargets.length - 1, prevIndex - 1));
-          newTarget = vTargets[newIndex];
-        }
-        if (newTarget) {
-          currentTarget = newTarget;
-          moveCanvasToTarget(currentTarget);
-        }
+      if (!onDrag) {
+        return;
       }
+      try {
+        if (/^Arrow/.test(key)) {
+          e.preventDefault();
+          const currentTargetNode = getNearestTargetNode();
+          let prevIndex, newIndex, newTarget;
+          if (key === "ArrowLeft") {
+            prevIndex = getHorizontalNodeIndex(currentTargetNode);
+            newIndex = Math.max(0, Math.min(hTargetNodes.length - 1, prevIndex - 1));
+            newTarget = hTargetNodes[newIndex];
+          } else if (key === "ArrowRight") {
+            prevIndex = getHorizontalNodeIndex(currentTargetNode);
+            newIndex = Math.max(0, Math.min(hTargetNodes.length - 1, prevIndex + 1));
+            newTarget = hTargetNodes[newIndex];
+          } else if (key === "ArrowDown") {
+            prevIndex = getVerticalNodeIndex(currentTargetNode);
+            newIndex = Math.max(0, Math.min(vTargetNodes.length - 1, prevIndex + 1));
+            newTarget = vTargetNodes[newIndex];
+          } else if (key === "ArrowUp") {
+            prevIndex = getVerticalNodeIndex(currentTargetNode);
+            newIndex = Math.max(0, Math.min(vTargetNodes.length - 1, prevIndex - 1));
+            newTarget = vTargetNodes[newIndex];
+          }
+          if (newTarget) {
+            moveCanvasToTarget(newTarget.cx, newTarget.cy);
+          }
+        } else if (/^[wsad]$/.test(key)) {
+          e.preventDefault();
+          const currentTargetSlot = getNearestTargetSlot();
+          let prevIndex, newIndex, newTarget;
+          if (key === "a") {
+            prevIndex = getHorizontalSlotIndex(currentTargetSlot);
+            newIndex = Math.max(0, Math.min(hTargetSlots.length - 1, prevIndex - 1));
+            newTarget = hTargetSlots[newIndex];
+          } else if (key === "d") {
+            prevIndex = getHorizontalSlotIndex(currentTargetSlot);
+            newIndex = Math.max(0, Math.min(hTargetSlots.length - 1, prevIndex + 1));
+            newTarget = hTargetSlots[newIndex];
+          } else if (key === "s") {
+            prevIndex = getVerticalSlotIndex(currentTargetSlot);
+            newIndex = Math.max(0, Math.min(vTargetSlots.length - 1, prevIndex + 1));
+            newTarget = vTargetSlots[newIndex];
+          } else if (key === "w") {
+            prevIndex = getVerticalSlotIndex(currentTargetSlot);
+            newIndex = Math.max(0, Math.min(vTargetSlots.length - 1, prevIndex - 1));
+            newTarget = vTargetSlots[newIndex];
+          }
+          if (newTarget) {
+            moveCanvasToTarget(newTarget.x, newTarget.y);
+          }
+        }
+      } catch(err) {
+        console.error(err);
+      } 
     }
   
     window.addEventListener("keydown", keydownEvent);
@@ -251,46 +322,51 @@ function animateCanvas(dstX, dstY, cb, time = 1000) {
     const origProcessMouseDown = LGraphCanvas.prototype.processMouseDown;
     LGraphCanvas.prototype.processMouseDown = function(e) {
       const r = origProcessMouseDown?.apply(this, arguments);
-  
+
       onDrag = chkDragging.apply(this, [e]);
       if (onDrag) {
-        const { input, output, node, slot } = this.connecting_links[0];
-        if (input || output) {
-          isInput = !!input;
+        try {
+          const { input, output, node, slot } = this.connecting_links[0];
+          if (input || output) {
+            isInput = !!input;
+    
+            initialNode = node;
+            initialSlot = isInput ? input : output;
+            initialType = initialSlot.type;
+            initialSlotIndex = slot;
+
+            initialState = {
+              clientX: e.clientX,
+              clientY: e.clientY,
+              canvasX: e.canvasX,
+              canvasY: e.canvasY,
+              canvas_mouse: this.canvas_mouse,
+              canvas_mouse: this.canvas_mouse,
+              graph_mouse: this.graph_mouse,
+              mouse: this.mouse, 
+              last_mouse: this.last_mouse, 
+              last_mouse_position: this.last_mouse_position,
+              canvas_offset: this.ds.offset,
+              canvas_scale: this.ds.scale,
+            };
   
-          // initialState = {
-          //   clientX: e.clientX,
-          //   clientY: e.clientY,
-          //   canvasX: e.canvasX,
-          //   canvasY: e.canvasY,
-          //   canvas_mouse: this.canvas_mouse,
-          //   canvas_mouse: this.canvas_mouse,
-          //   graph_mouse: this.graph_mouse,
-          //   mouse: this.mouse, 
-          //   last_mouse: this.last_mouse, 
-          //   last_mouse_position: this.last_mouse_position,
-          //   canvas_offset: this.ds.offset,
-          //   canvas_scale: this.ds.scale,
-          // };
+            const validTargetNodes = getValidTargetNodes(initialNode, initialType, isInput);
+            const validTargetSlots = getValidTargetSlots(initialNode, initialType, isInput);
+            const initialTargetNode = nodeToTarget(initialNode);
+            const initialTargetSlot = slotToTarget(initialNode, initialSlot, isInput);
+            
+            hTargetNodes = sortBy([initialTargetNode, ...validTargetNodes], ["x1", "y1"]);
+            vTargetNodes = sortBy([initialTargetNode, ...validTargetNodes], ["y1", "x1"]);
   
-          initialNode = node;
-          initialSlot = isInput ? input : output;
-          initialType = initialSlot.type;
-          initialSlotIndex = slot;
+            hTargetSlots = sortBy([initialTargetSlot, ...validTargetSlots], ["x", "y"]);
+            vTargetSlots = sortBy([initialTargetSlot, ...validTargetSlots], ["y", "x"]);
   
-          const validTargets = getValidTargets(initialNode, initialType, isInput);
-          const initialTarget = nodeToTarget(initialNode);
-          
-          hTargets = sortBy([initialTarget, ...validTargets], ["x1", "y1"]);
-          vTargets = sortBy([initialTarget, ...validTargets], ["y1", "x1"]);
-  
-          initialTargets = hTargets;
-  
-          // get canvas center
-          const cc = getCanvasCenter.apply(this);
-  
-          // get nearest slot in targets
-          currentTarget = getNearestTarget(cc.x, cc.y);
+            // debug
+            // console.log(hTargetNodes)
+            // console.log(hTargetSlots)
+          }
+        } catch(err) {
+          console.error(err);
         }
       }
   
